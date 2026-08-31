@@ -9,51 +9,23 @@ HandLandmarker = mp.tasks.vision.HandLandmarker
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 VisionRunningMode = mp.tasks.vision.RunningMode
 
-# 21 Hand landmark connection pairs for drawing
-HAND_CONNECTIONS = [
-    (0, 1),
-    (1, 2),
-    (2, 3),
-    (3, 4),  # Thumb
-    (0, 5),
-    (5, 6),
-    (6, 7),
-    (7, 8),  # Index
-    (5, 9),
-    (9, 10),
-    (10, 11),
-    (11, 12),  # Middle
-    (9, 13),
-    (13, 14),
-    (14, 15),
-    (15, 16),  # Ring
-    (13, 17),
-    (17, 18),
-    (18, 19),
-    (19, 20),  # Pinky
-    (0, 17),  # Palm Base
-]
-
 MODEL_PATH = "hand_landmarker.task"
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 
 
 def ensure_model_downloaded():
-    """Downloads the official MediaPipe hand landmarker model if missing."""
     if not os.path.exists(MODEL_PATH):
-        print("Downloading MediaPipe hand tracking model (~8MB)...")
         urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-        print("Model downloaded successfully!")
 
 
 class HandDetector:
     def __init__(
-        self, max_hands=2, min_detection_confidence=0.6, min_tracking_confidence=0.5
+        self, max_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5
     ):
         ensure_model_downloaded()
         self.max_hands = max_hands
-        self.tip_ids = [4, 8, 12, 16, 20]
 
+        # Fast single-hand real-time tracking
         options = HandLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=MODEL_PATH),
             running_mode=VisionRunningMode.VIDEO,
@@ -64,90 +36,32 @@ class HandDetector:
         self.landmarker = HandLandmarker.create_from_options(options)
         self.results = None
 
-    def find_hands(self, img, draw=True):
-        """Processes video frame and renders hand landmark skeletons."""
+    def find_hands(self, img):
         h, w, _ = img.shape
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=img_rgb)
-        frame_timestamp_ms = int(time.time() * 1000)
+        timestamp_ms = int(time.time() * 1000)
 
-        self.results = self.landmarker.detect_for_video(mp_image, frame_timestamp_ms)
-
-        if self.results and self.results.hand_landmarks and draw:
-            for hand_landmarks in self.results.hand_landmarks:
-                # Draw lines between joints
-                for start_idx, end_idx in HAND_CONNECTIONS:
-                    pt1 = (
-                        int(hand_landmarks[start_idx].x * w),
-                        int(hand_landmarks[start_idx].y * h),
-                    )
-                    pt2 = (
-                        int(hand_landmarks[end_idx].x * w),
-                        int(hand_landmarks[end_idx].y * h),
-                    )
-                    cv2.line(img, pt1, pt2, (0, 255, 0), 2)
-
-                # Draw joint points
-                for lm in hand_landmarks:
-                    cx, cy = int(lm.x * w), int(lm.y * h)
-                    cv2.circle(img, (cx, cy), 4, (0, 0, 255), cv2.FILLED)
+        self.results = self.landmarker.detect_for_video(mp_image, timestamp_ms)
         return img
 
-    def find_position(self, img, hand_no=0, draw=True):
-        """Returns list of [id, x, y] for all 21 keypoints of the requested hand."""
-        landmark_list = []
+    def get_hand_center_and_pinch(self, img):
+        """Returns (x, y, is_pinching) in constant time for instant response."""
         if self.results and self.results.hand_landmarks:
-            if hand_no < len(self.results.hand_landmarks):
-                hand_landmarks = self.results.hand_landmarks[hand_no]
-                h, w, _ = img.shape
-                for id_val, lm in enumerate(hand_landmarks):
-                    cx, cy = int(lm.x * w), int(lm.y * h)
-                    landmark_list.append([id_val, cx, cy])
-                    if draw and id_val in self.tip_ids:
-                        cv2.circle(img, (cx, cy), 8, (255, 0, 255), cv2.FILLED)
-        return landmark_list
+            lm = self.results.hand_landmarks[0]
+            h, w, _ = img.shape
 
+            # Landmark 9 is the palm center (knuckle of middle finger) - very stable
+            center_x = int(lm[9].x * w)
+            center_y = int(lm[9].y * h)
 
-def main():
-    p_time = 0
-    cap = cv2.VideoCapture(0)
-    detector = HandDetector(max_hands=2)
+            # Thumb Tip (4) and Index Tip (8)
+            t_x, t_y = int(lm[4].x * w), int(lm[4].y * h)
+            i_x, i_y = int(lm[8].x * w), int(lm[8].y * h)
 
-    print("Camera running. Show your hand to the camera! Press 'q' to exit.")
+            # Fast squared euclidean distance check (avoids sqrt)
+            pinch_dist_sq = (t_x - i_x) ** 2 + (t_y - i_y) ** 2
+            is_pinching = pinch_dist_sq < 1200  # ~35px threshold
 
-    while True:
-        success, img = cap.read()
-        if not success:
-            break
-
-        img = cv2.flip(img, 1)
-        img = detector.find_hands(img, draw=True)
-        lm_list = detector.find_position(img, hand_no=0, draw=True)
-
-        if len(lm_list) != 0:
-            print(f"Index Finger Tip: X={lm_list[8][1]}, Y={lm_list[8][2]}")
-
-        c_time = time.time()
-        fps = 1 / (c_time - p_time) if (c_time - p_time) > 0 else 0
-        p_time = c_time
-
-        cv2.putText(
-            img,
-            f"FPS: {int(fps)}",
-            (10, 40),
-            cv2.FONT_HERSHEY_PLAIN,
-            2,
-            (255, 0, 0),
-            2,
-        )
-
-        cv2.imshow("Hand Tracking - Modern MediaPipe", img)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-
-if __name__ == "__main__":
-    main()
+            return (center_x, center_y, is_pinching, (t_x, t_y, i_x, i_y))
+        return None

@@ -1,28 +1,37 @@
-# AI-Powered Gesture Game Controller 🎮✋
+# AI-Powered Instant Virtual Game Controller 🎮✋
 
-A real-time, vision-based virtual game controller that converts bare-hand gestures and dynamic swipes into keyboard and gamepad inputs using OpenCV, MediaPipe Tasks, and PyDirectInput.
+A real-time, low-latency vision-based virtual game controller that translates bare-hand positioning and pinch actions into instantaneous keyboard and gamepad events using OpenCV, MediaPipe Tasks, and PyDirectInput.
 
 ---
 
-## 🚀 Features
+## 🚀 Key Features
 
-- **Dual & Single Hand Steering:** Drive using single hand position tracking or virtual dual-hand steering wheel tilt.
-- **Dynamic Swipe Detection:** Buffer-based queue optimized for reliable swipe triggers at 30 FPS.
-- **Gesture Controls Mapping:**
-  - **Gas / Accelerate:** Open palm (3+ fingers extended) → `UP Arrow`
-  - **Brake / Reverse:** Closed fist → `DOWN Arrow`
-  - **Steering:** Left/Right wrist offset or dual-hand tilt → `LEFT / RIGHT Arrows`
-  - **Jump / Nitro:** Thumb + Index pinch or quick Up-Swipe → `SPACE`
-- **Real-Time HUD Dashboard:** Live OpenCV overlay displaying active state, steering direction, FPS, and detected swipe logs.
+- **Instant Virtual D-Pad Zones:** $O(1)$ constant-time spatial zone triggering for zero perceived input lag.
+- **Visual Feedback HUD:** Active grid zones illuminate instantly upon hand entry.
+- **Precision Pinch Detection:** Fast squared-Euclidean distance thresholding between thumb and index fingertips for action/jump triggers.
+- **Direct Input Emulation:** PyDirectInput integration for direct hardware-level keystroke delivery into native and browser games.
+
+---
+
+## 🎮 Controls & Mechanics
+
+| Movement / Action | Screen Trigger Zone | Emulated Key |
+| :--- | :--- | :--- |
+| **Throttle / Accelerate** | Hand in **Top Zone** | `UP Arrow` / `W` |
+| **Brake / Reverse** | Hand in **Bottom Zone** | `DOWN Arrow` / `S` |
+| **Steer / Move Left** | Hand in **Left Zone** | `LEFT Arrow` / `A` |
+| **Steer / Move Right** | Hand in **Right Zone** | `RIGHT Arrow` / `D` |
+| **Neutral / Coast** | Hand in **Center Box** | Key Release / None |
+| **Jump / Nitro / Action** | **Thumb + Index Pinch** | `SPACE` |
 
 ---
 
 ## 🛠️ Tech Stack
 
 - **Language:** Python 3
-- **Computer Vision:** MediaPipe Tasks API (Hand Landmarker), OpenCV
-- **Input Emulation:** PyDirectInput (DirectX compatible)
-- **Math & Utilities:** NumPy
+- **Computer Vision:** MediaPipe Tasks API (`HandLandmarker`), OpenCV (`cv2`)
+- **Input Emulation:** PyDirectInput
+- **Architecture:** Spatial bounding zones & vectorized Euclidean landmark tracking
 
 ---
 
