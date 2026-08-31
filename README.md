@@ -1,22 +1,32 @@
 # AI-Powered Gesture Game Controller 🎮✋
 
-A real-time, vision-based virtual game controller that converts bare-hand gestures and swipes into keyboard/gamepad inputs using OpenCV, MediaPipe Tasks, and PyDirectInput.
+A real-time, vision-based virtual game controller that converts bare-hand gestures and dynamic swipes into keyboard and gamepad inputs using OpenCV, MediaPipe Tasks, and PyDirectInput.
 
 ---
 
-## Features
+## 🚀 Features
+
 - **Dual & Single Hand Steering:** Drive using single hand position tracking or virtual dual-hand steering wheel tilt.
-- **Dynamic Swipe Detection:** Sliding position buffer queue optimized for smooth swipe actions at 30 FPS.
-- **Intuitive Controls:**
-  - **Gas / Accelerate:** Open palm (3+ fingers extended) $\rightarrow$ `UP Arrow`
-  - **Brake / Reverse:** Closed fist $\rightarrow$ `DOWN Arrow`
-  - **Steering:** Left/Right wrist offset or hand tilt $\rightarrow$ `LEFT / RIGHT Arrows`
-  - **Jump / Nitro:** Thumb + Index pinch or quick Up-Swipe $\rightarrow$ `SPACE`
-- **Real-Time HUD:** OpenCV overlay displaying FPS, active action states, steering angle, and swipe logs.
+- **Dynamic Swipe Detection:** Buffer-based queue optimized for reliable swipe triggers at 30 FPS.
+- **Gesture Controls Mapping:**
+  - **Gas / Accelerate:** Open palm (3+ fingers extended) → `UP Arrow`
+  - **Brake / Reverse:** Closed fist → `DOWN Arrow`
+  - **Steering:** Left/Right wrist offset or dual-hand tilt → `LEFT / RIGHT Arrows`
+  - **Jump / Nitro:** Thumb + Index pinch or quick Up-Swipe → `SPACE`
+- **Real-Time HUD Dashboard:** Live OpenCV overlay displaying active state, steering direction, FPS, and detected swipe logs.
 
 ---
 
-## Installation & Setup
+## 🛠️ Tech Stack
+
+- **Language:** Python 3
+- **Computer Vision:** MediaPipe Tasks API (Hand Landmarker), OpenCV
+- **Input Emulation:** PyDirectInput (DirectX compatible)
+- **Math & Utilities:** NumPy
+
+---
+
+## 📦 Installation & Setup
 
 1. **Clone the repository:**
    ```bash
