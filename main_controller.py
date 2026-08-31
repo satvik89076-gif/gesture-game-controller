@@ -1,11 +1,12 @@
+from collections import deque
+import math
+import time
 import cv2
 import numpy as np
-import time
-import math
 import pydirectinput
 from HandTrackingModule import HandDetector
 
-# Minimize PyDirectInput latency
+# Minimize input latency
 pydirectinput.PAUSE = 0.001
 
 # Initialize camera & detector
@@ -57,25 +58,24 @@ def calculate_distance(p1, p2):
     return math.hypot(p2[1] - p1[1], p2[2] - p1[2])
 
 
-# Swipe detection tracker variables
-prev_wrist_pos = None
-prev_wrist_time = 0
+# --- BUFFER-BASED SWIPE TRACKER (Optimized for 30 FPS) ---
+# Stores last 6 frames of (x, y, timestamp)
+pos_history = deque(maxlen=6)
 last_swipe_time = 0
-SWIPE_COOLDOWN = 0.35  # Cooldown in seconds to prevent accidental double-swipes
-SWIPE_VELOCITY_THRESH = 750  # Minimum pixel speed per second to count as a swipe
+SWIPE_COOLDOWN = 0.35  # seconds
+SWIPE_DIST_THRESH = 70  # minimum pixel displacement across buffer window
+SWIPE_SPEED_THRESH = 350  # pixel/sec speed threshold
 
 last_detected_swipe = "NONE"
 swipe_display_timer = 0
-
 p_time = 0
 
-print("\n=== Virtual Controller with Swipe + Continuous Mechanics ===")
-print("Swipe TOP: Jump (SPACE)")
+print("\n=== Virtual Controller (Buffer-Smoothed for 30 FPS) ===")
+print("Swipe UP: Jump (SPACE)")
 print("Swipe LEFT: Turn Left")
 print("Swipe RIGHT: Turn Right")
-print("Pinch (Thumb + Index): Nitro (SPACE)")
-print("Hold Palm Open: Continuous Gas (UP)")
-print("Closed Fist: Continuous Brake (DOWN)")
+print("Pinch: Nitro (SPACE)")
+print("Open Palm: Gas (UP) | Fist: Brake (DOWN)")
 print("Press 'q' in video window to exit.\n")
 
 while True:
@@ -83,7 +83,7 @@ while True:
     if not success:
         break
 
-    img = cv2.flip(img, 1)  # Mirror feed
+    img = cv2.flip(img, 1)
     h, w, _ = img.shape
     curr_time = time.time()
 
@@ -100,45 +100,52 @@ while True:
 
     if hand_count == 0:
         release_all_keys()
-        prev_wrist_pos = None
+        pos_history.clear()
 
     elif hand_count == 1:
         # SINGLE HAND MODE
         lm = detector.find_position(img, hand_no=0, draw=False)
         if len(lm) >= 21:
-            wrist_x, wrist_y = lm[0][1], lm[0][2]
+            # Use Index Knuckle (Landmark 5) or Wrist (Landmark 0) for stable trajectory
+            track_x, track_y = lm[5][1], lm[5][2]
+            pos_history.append((track_x, track_y, curr_time))
 
-            # --- SWIPE DETECTION LOGIC ---
-            if prev_wrist_pos is not None:
-                dt = curr_time - prev_wrist_time
+            # --- MULTI-FRAME SWIPE DETECTION ---
+            if len(pos_history) >= 4 and (curr_time - last_swipe_time > SWIPE_COOLDOWN):
+                old_x, old_y, old_t = pos_history[0]
+                dx = track_x - old_x
+                dy = track_y - old_y
+                dt = curr_time - old_t
+
                 if dt > 0:
-                    vx = (wrist_x - prev_wrist_pos[0]) / dt
-                    vy = (wrist_y - prev_wrist_pos[1]) / dt
+                    speed = math.hypot(dx, dy) / dt
 
-                    if curr_time - last_swipe_time > SWIPE_COOLDOWN:
-                        # Swipe Up / Top (Jump) -> vy is negative (screen coords go down)
-                        if vy < -SWIPE_VELOCITY_THRESH and abs(vy) > abs(vx) * 1.2:
+                    if speed > SWIPE_SPEED_THRESH:
+                        # Swipe UP (Jump) - dy is negative
+                        if dy < -SWIPE_DIST_THRESH and abs(dy) > abs(dx) * 1.1:
                             tap_key("space")
-                            last_detected_swipe = "SWIPE TOP (JUMP)"
+                            last_detected_swipe = "SWIPE UP (JUMP)"
                             last_swipe_time = curr_time
                             swipe_display_timer = curr_time + 0.6
-                        # Swipe Right
-                        elif vx > SWIPE_VELOCITY_THRESH and abs(vx) > abs(vy) * 1.2:
+                            pos_history.clear()
+
+                        # Swipe RIGHT
+                        elif dx > SWIPE_DIST_THRESH and abs(dx) > abs(dy) * 1.1:
                             tap_key("right")
                             last_detected_swipe = "SWIPE RIGHT"
                             last_swipe_time = curr_time
                             swipe_display_timer = curr_time + 0.6
-                        # Swipe Left
-                        elif vx < -SWIPE_VELOCITY_THRESH and abs(vx) > abs(vy) * 1.2:
+                            pos_history.clear()
+
+                        # Swipe LEFT
+                        elif dx < -SWIPE_DIST_THRESH and abs(dx) > abs(dy) * 1.1:
                             tap_key("left")
                             last_detected_swipe = "SWIPE LEFT"
                             last_swipe_time = curr_time
                             swipe_display_timer = curr_time + 0.6
+                            pos_history.clear()
 
-            prev_wrist_pos = (wrist_x, wrist_y)
-            prev_wrist_time = curr_time
-
-            # --- PINCH NITRO DETECTION ---
+            # --- PINCH NITRO ---
             pinch_dist = calculate_distance(lm[4], lm[8])
             if pinch_dist < 35:
                 press_key("space")
@@ -150,7 +157,7 @@ while True:
                 release_key("space")
                 nitro_text = "OFF"
 
-            # --- CONTINUOUS ACCEL / BRAKE ---
+            # --- CONTINUOUS GAS / BRAKE ---
             index_up = is_finger_up(lm, 8, 6)
             middle_up = is_finger_up(lm, 12, 10)
             ring_up = is_finger_up(lm, 16, 14)
@@ -173,6 +180,7 @@ while True:
             # --- CONTINUOUS STEERING POSITION ---
             center_x = w // 2
             deadzone = 60
+            wrist_x = lm[0][1]
             if wrist_x < center_x - deadzone:
                 press_key("left")
                 release_key("right")
@@ -211,7 +219,11 @@ while True:
                 left_y, right_y = w2_y, w1_y
 
             cv2.line(
-                img, (int(w1_x), int(w1_y)), (int(w2_x), int(w2_y)), (255, 255, 0), 3
+                img,
+                (int(w1_x), int(w1_y)),
+                (int(w2_x), int(w2_y)),
+                (255, 255, 0),
+                3,
             )
             tilt_diff = left_y - right_y
 
@@ -240,7 +252,7 @@ while True:
                 release_key("up")
                 action_text = "BRAKE (DOWN)"
 
-    # Heads-Up Display (HUD)
+    # Heads-Up Display
     cv2.rectangle(img, (10, 10), (480, 155), (0, 0, 0), cv2.FILLED)
     cv2.putText(
         img,
